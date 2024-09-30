@@ -15,7 +15,7 @@ let database = {
 
 // Session setup
 const sessionMiddleware = session({
-  secret: 'your-secret-key',  // Change this to a strong secret
+  secret: uuidv4(),  // Change this to a strong secret
   resave: false,
   saveUninitialized: true,
   cookie: { secure: false }  // Set true if using HTTPS
@@ -31,23 +31,63 @@ const wss = new WebSocket.Server({ server });
 function wrapSession(ws, req) {
   sessionMiddleware(req, {}, () => {
     ws.session = req.session;
-    if (!req.session.userID) {
-      req.session.userID = uuidv4();  // Assign a new user ID if not set
-    }
-    ws.session.save();
-  });
+    const urlParams = new URLSearchParams(req.url.split('?')[1]);
+    const userID = urlParams.get('userID');
+    console.log('- - -')
+    console.log(userID)
+    if (userID!='null') {
+      req.session.userID = userID;
 
+      if (!database.users.find(user => user.id === userID)) {
+        let newUser = {
+          id: userID,
+          moveHistory: [],
+          wins: 0,
+          loses: 0,
+        };
+        database.users.push(newUser);
+        console.log(`New user created: ${userID}`);
+      } 
+      else {
+        console.log(`Session initialized for existing user: ${userID}`);
+      }
+    } 
+    else {
+      console.log('No userID provided, creating a new session.');
+      req.session.userID = uuidv4();
+      let newUser = {
+        id: req.session.userID,
+        moveHistory: [],
+        wins: 0,
+        loses: 0,
+      };
+      database.users.push(newUser);
+    }
+
+    req.session.save();
+
+
+  });
 }
+
 
 // WebSocket connection
 wss.on('connection', (ws, req) => {
-  wrapSession(ws, req);
+  wrapSession(ws, req)
+
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: 'initUser',
+          userID: client.session.userID,
+      }));
+    }
+});
 
   ws.on('message', (message) => {
-    console.log(`User ${ws.session.userID} sent message: ${message}`);
-
-    // Example: Handle joining a room
     const parsedMessage = JSON.parse(message);
+    console.log('- - -')
+    console.log(`User ${ws.session.userID} sent message: ${message}`);
 
     if (parsedMessage.type === 'joinRoom') {
         let availableRoom = []
@@ -62,6 +102,7 @@ wss.on('connection', (ws, req) => {
                 id : uuidv4(),
                 number : database.rooms.length,
                 users: [],
+                moves: [],
             }
             database.rooms.push(room)
             availableRoom = room
@@ -75,6 +116,14 @@ wss.on('connection', (ws, req) => {
                         type: 'userJoin',
                         count: availableRoom.users.length
                     }));
+                    client.send(JSON.stringify({
+                      type: 'startGame',
+                  }));
+                }
+                if (client.readyState === WebSocket.OPEN && client.session.userID === ws.session.userID) {
+                  client.send(JSON.stringify({
+                      type: 'startGame',
+                  }));
                 }
             });
         }
@@ -89,20 +138,29 @@ wss.on('connection', (ws, req) => {
             count: availableRoom.users.length,
         }));
 
-        console.log(`User ${ws.session.userID} joined room #${availableRoom.number}: ${ws.session.roomID}`);
+        console.log(`User ${ws.session.userID} joined room #${availableRoom.number} [${availableRoom.users.length}/2]: ${ws.session.roomID}`);
         // Broadcast to room or handle room logic here
     }
 
-    // Broadcast messages to other clients (for simplicity, we're broadcasting to all)
-    wss.clients.forEach(client => {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          userID: ws.session.userID,
-          roomID: ws.session.roomID,
-          message: parsedMessage.message
-        }));
-      }
-    });
+    if (parsedMessage.type === 'userMove') {
+      let targetRoom = database.rooms.find((room)=>room.id==parsedMessage.roomID)
+      let targetUser = database.users.find((user)=>user.id==parsedMessage.userID)
+      
+      targetRoom.moves.push({
+        user: parsedMessage.userID,
+        move: parsedMessage.move,
+      })
+      let enemyUser = targetRoom.users.filter((user)=>user!=parsedMessage.userID)[0]
+      wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN && client.session.userID === enemyUser) {
+              client.send(JSON.stringify({
+                type: 'enemyMove',
+                move: parsedMessage.move,
+              }));
+              console.log('Sending enemy move to : ' + enemyUser)
+          }
+      });
+    }
   });
 
   ws.on('close', () => {
@@ -117,23 +175,6 @@ wss.on('connection', (ws, req) => {
     console.log(`User ${ws.session.userID} left room #${room.number}: ${room.id}`);
     room.users = room.users.filter(a => a!=ws.session.userID)
   });
-});
-
-// API route to check session (optional)
-app.get('/api/check-session', (req, res) => {
-    try {
-        res.json({
-            userID: req.session.userID || null,
-            roomID: req.session.roomID || null
-        });
-    }
-    catch {
-        wrapSession(ws, req);
-        res.json({
-            userID: req.session.userID || null,
-            roomID: req.session.roomID || null
-        });
-    }
 });
 
 // Start the server
