@@ -1,7 +1,8 @@
 <template>
   <div class="battlefield">
-    <div class="move" id="enemy">
-      <div class=enemy-move>
+
+    <div class="move">
+      <div class="enemy-move" id="enemy">
       </div>
     </div>
     <div class="your move">
@@ -9,7 +10,7 @@
         <span v-if="counter">{{ counter }}</span>
         <div class="loader" v-else></div>
       </div>
-      <div class="election-container" v-else>
+      <div class="election-container" v-if="play&&!move">
         <div class="election-row">
           <button v-on:click="sendMove('rock')">
             <img src="@/assets/fist-bump.png" height="100%" width="100%">
@@ -24,11 +25,14 @@
           </button>
         </div>
       </div>
+      <div :class="['enemy-move', move]" v-else>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
+
 export default {
   name: 'BattleField',
   props: {
@@ -37,7 +41,7 @@ export default {
   data() {
     return {
       play: false,
-      move: 'rock',
+      move: null,
       roomID: null,
       userID: null,
       counter: null,
@@ -45,6 +49,7 @@ export default {
       wins: 0,
       loses: 0,
       roomCount: 0,
+      result: null,
     }
   },
   mounted() {
@@ -74,6 +79,17 @@ export default {
         enemy.classList.remove('paper')
         enemy.classList.add(data.move)
       }
+      if (data.type === 'gameResult') {
+        if (data.winner == 'draw') {
+          console.log('draw')
+        }
+        else if (data.winner == this.userID) {
+          console.log('Win')
+        }
+        else {
+          console.log('Loss')
+        }
+      }
     };
 
     this.ws.onopen = async () => {
@@ -96,8 +112,9 @@ export default {
       }, 500);
     },
     sendMove(move) {
+      this.move = move;
       this.ws.send(JSON.stringify({ type: 'userMove', roomID: this.roomID, userID: this.userID, move: move }));
-    }
+    },
   }
 };
 </script>
@@ -121,7 +138,8 @@ export default {
   color: white;
 }
 .counter {
-  height: fit-content;
+  height: 100%;
+  aspect-ratio: 1;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -143,7 +161,6 @@ export default {
 .your:has(.loader):active {
   pointer-events: none;
 }
-
 .loader {
   display: inline-block;
   width: 30px;
@@ -203,19 +220,19 @@ export default {
   width: 90%;
   border-radius: 50%;
 }
-.paper .enemy-move {
+.paper.enemy-move {
   background: url("@/assets/palm-of-hand.png");
   background-size: 80%;
   background-position: center;
   background-repeat: no-repeat;
 }
-.rock .enemy-move  {
+.rock.enemy-move  {
   background: url("@/assets/fist-bump.png");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 }
-.scissor .enemy-move  {
+.scissor.enemy-move  {
   background: url("@/assets/scissor.png");
   background-size: 80%;
   background-position: center;
