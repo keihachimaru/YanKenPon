@@ -8,9 +8,20 @@ const { v4: uuidv4 } = require('uuid');  // For generating room and user IDs
 const app = express();
 const port = 3000;
 
+let matchTypes = {
+  'rapid': {
+    numFights: 3,
+    duration: 5,
+  },
+  'slow': {
+    numFights: 5,
+    duration: 30,
+  }
+}
+
 let database = {
-    rooms: [],
-    users: [],
+  rooms: [],
+  users: [],
 };
 
 // Session setup
@@ -70,8 +81,6 @@ function wrapSession(ws, req) {
   });
 }
 
-/*Utility*/
-
 function getRoom(type) {
   let availableRoom = []
   for (let i=0; i<database.rooms.length; i++) {
@@ -94,6 +103,7 @@ function getRoom(type) {
 
   return availableRoom
 }
+
 
 // WebSocket connection
 wss.on('connection', (ws, req) => {
@@ -123,13 +133,18 @@ wss.on('connection', (ws, req) => {
         ws.session.roomID = availableRoom.id
 
         if (availableRoom.users.length == 1) {
+            console.log(matchType)
             let match = {
               id: uuidv4(),
               users: [availableRoom.users[0], ws.session.userID],
               moves: [],
               date: new Date().toLocaleTimeString(),
               winner: null,
-              type: matchType,
+              numFights: matchTypes[matchType].numFights,
+              duration: matchTypes[matchType].duration,
+              fights: [
+
+              ]
             }
             availableRoom.matches.push(match)
             wss.clients.forEach(client => {
@@ -205,11 +220,12 @@ wss.on('connection', (ws, req) => {
 
         if (move1.move === move2.move) {
           winner = 'draw';
-        } 
+        }
         else if (
           (move1.move === 'rock' && move2.move === 'scissor') ||
           (move1.move === 'scissor' && move2.move === 'paper') ||
-          (move1.move === 'paper' && move2.move === 'rock')
+          (move1.move === 'paper' && move2.move === 'rock') ||
+          (move2.move === 'none')
         ) 
         {
           winner = move1.user;
@@ -225,7 +241,7 @@ wss.on('connection', (ws, req) => {
           loser = move1.user;
           loserMove = move1.move;
         }
-    
+
         console.log('Winner:', winner);
         
         if (winner == 'draw') {
@@ -241,30 +257,55 @@ wss.on('connection', (ws, req) => {
           });
         }
         else {
-          targetMatch.winner = winner
+          let fight = {
+            move1: move1.move,
+            user1: move1.user,
+            move2: move2.move,
+            user2: move2.user,
+            winner: winner
+          }
+          targetMatch.fights.push(fight)
 
-          wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN && (client.session.userID === move1.user || client.session.userID === move2.user)) {
-              client.send(
-                JSON.stringify({
-                  type: 'gameResult',
-                  match: targetMatch,
-                })
-              );
-            }
-          });
-          
-          let winnerUser = database.users.find(user => user.id == winner)
-          let loserUser = database.users.find(user => user.id == loser)
+          if (targetMatch.numFights == targetMatch.fights.length) {
+            targetMatch.winner = winner
 
-          winnerUser.wins += 1
-          loserUser.losses += 1
+            wss.clients.forEach((client) => {
+              if (client.readyState === WebSocket.OPEN && (client.session.userID === move1.user || client.session.userID === move2.user)) {
+                client.send(
+                  JSON.stringify({
+                    type: 'gameResult',
+                    fight: fight,
+                    match: targetMatch,
+                  })
+                );
+              }
+            });
+            
+            let winnerUser = database.users.find(user => user.id == winner)
+            let loserUser = database.users.find(user => user.id == loser)
 
-          winnerUser.matches.push(targetMatch)
-          loserUser.matches.push(targetMatch)
+            winnerUser.wins += 1
+            loserUser.losses += 1
 
-          targetRoom.users = []
-          console.log('\n\n\n\n')
+            winnerUser.matches.push(targetMatch)
+            loserUser.matches.push(targetMatch)
+
+            targetRoom.users = []
+            console.log('\n\n\n\n')
+          }
+          else {
+            targetMatch.moves = []
+            wss.clients.forEach((client) => {
+              if (client.readyState === WebSocket.OPEN && (client.session.userID === move1.user || client.session.userID === move2.user)) {
+                client.send(
+                  JSON.stringify({
+                    type: 'fightResult',
+                    fight: fight,
+                  })
+                );
+              }
+            });
+          }
         }
       }
     }
