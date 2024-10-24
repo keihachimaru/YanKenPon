@@ -23,9 +23,24 @@
   </div>
   <div class="battlefield" v-if="gameResult=='win'">
     <h1>Win</h1>
+    <div class="score">
+      <span class="enemy-score">{{ enemyScore }}</span>
+      <span style="font-size: 14px;">
+        <a href="/">Continue</a>
+      </span>
+      <span class="your-score">{{ yourScore }}</span>
+    </div>
+    <a href="/">Continue</a>
   </div>
   <div class="battlefield" v-if="gameResult=='loss'">
     <h1>Loss</h1>
+    <div class="score">
+      <span class="enemy-score">{{ enemyScore }}</span>
+      <span style="font-size: 14px;">
+        <a href="/">Continue</a>
+      </span>
+      <span class="your-score">{{ yourScore }}</span>
+    </div>
   </div>
 </template>
 
@@ -134,8 +149,6 @@ export default {
         setTimeout(()=>{
           this.enemyMove = null;
           this.userMove = null;
-          this.enemyScore = 0;
-          this.yourScore = 0;
           this.gameResult = gameResult;
         }, 1000)
 
@@ -144,6 +157,7 @@ export default {
     };
 
     let matchType = window.localStorage.getItem('matchType')
+    console.log(matchType)
     if (!matchType) {
       window.location.href = '/'
     }
