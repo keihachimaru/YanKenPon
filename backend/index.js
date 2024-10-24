@@ -70,6 +70,30 @@ function wrapSession(ws, req) {
   });
 }
 
+/*Utility*/
+
+function getRoom(type) {
+  let availableRoom = []
+  for (let i=0; i<database.rooms.length; i++) {
+      if (database.rooms[i].users.length<2 && database.rooms[i].matchType==type) {
+          availableRoom = database.rooms[i]
+      }
+  }
+
+  if (!availableRoom.id) {
+      let room = {
+          id : uuidv4(),
+          number : database.rooms.length,
+          users: [],
+          matches: [],
+          matchType: type,
+      }
+      database.rooms.push(room)
+      availableRoom = room
+  }
+
+  return availableRoom
+}
 
 // WebSocket connection
 wss.on('connection', (ws, req) => {
@@ -94,25 +118,10 @@ wss.on('connection', (ws, req) => {
     console.log(`User ${ws.session.userID} sent message: ${message}`);
 
     if (parsedMessage.type === 'joinRoom') {
-        let availableRoom = []
-        for (let i=0; i<database.rooms.length; i++) {
-            if (database.rooms[i].users.length<2) {
-                availableRoom = database.rooms[i]
-            }
-        }
-
-        if (!availableRoom.id) {
-            let room = {
-                id : uuidv4(),
-                number : database.rooms.length,
-                users: [],
-                matches: [],
-            }
-            database.rooms.push(room)
-            availableRoom = room
-        }
-
+        let matchType = parsedMessage.matchType
+        let availableRoom = getRoom(matchType)
         ws.session.roomID = availableRoom.id
+
         if (availableRoom.users.length == 1) {
             let match = {
               id: uuidv4(),
@@ -120,6 +129,7 @@ wss.on('connection', (ws, req) => {
               moves: [],
               date: new Date().toLocaleTimeString(),
               winner: null,
+              type: matchType,
             }
             availableRoom.matches.push(match)
             wss.clients.forEach(client => {
@@ -152,7 +162,6 @@ wss.on('connection', (ws, req) => {
         }));
 
         console.log(`User ${ws.session.userID} joined room #${availableRoom.number} [${availableRoom.users.length}/2]: ${ws.session.roomID}`);
-        // Broadcast to room or handle room logic here
     }
 
     if (parsedMessage.type === 'userMove') {
@@ -270,8 +279,10 @@ wss.on('connection', (ws, req) => {
             break
         }
     }
-    console.log(`User ${ws.session.userID} left room #${room.number}: ${room.id}`);
-    room.users = room.users.filter(a => a!=ws.session.userID)
+    if (room) {
+      console.log(`User ${ws.session.userID} left room #${room.number}: ${room.id}`);
+      room.users = room.users.filter(a => a!=ws.session.userID)
+    }
   });
 });
 

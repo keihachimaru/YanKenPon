@@ -18,10 +18,10 @@
     .loader {
         width: 60px;
         height: 60px;
-        border: 3px solid rgba(109, 111, 240, 0.404);
+        border: 3px solid var(--primary-light);
         border-radius: 50%;
         overflow: hidden;
-        border-top-color: rgb(109, 111, 240);
+        border-top-color: var(--primary-dark);
         animation: spin 1s ease-in-out infinite;
         -webkit-animation: spin 1s linear infinite;
     }
